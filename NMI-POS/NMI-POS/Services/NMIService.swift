@@ -285,6 +285,54 @@ actor NMIService {
         return parseTransactionResponse(responseString)
     }
 
+    // MARK: - Void Transaction
+
+    func voidTransaction(securityKey: String, transactionId: String) async throws -> NMITransactionResponse {
+        var components = URLComponents(string: transactURL)!
+
+        let params: [String: String] = [
+            "security_key": securityKey,
+            "type": "void",
+            "transactionid": transactionId
+        ]
+
+        components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
+
+        guard let url = components.url else {
+            throw NMIError.networkError("Invalid URL")
+        }
+
+        APILogger.logRequest(endpoint: transactURL, method: "POST", parameters: params)
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            APILogger.logError(endpoint: transactURL, error: error)
+            throw NMIError.networkError(error.localizedDescription)
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NMIError.networkError("Invalid response")
+        }
+
+        guard let responseString = String(data: data, encoding: .utf8) else {
+            throw NMIError.parseError("Unable to decode response")
+        }
+
+        APILogger.logResponse(endpoint: transactURL, statusCode: httpResponse.statusCode, body: responseString)
+
+        guard httpResponse.statusCode == 200 else {
+            throw NMIError.networkError("Server returned status \(httpResponse.statusCode)")
+        }
+
+        return parseTransactionResponse(responseString)
+    }
+
     private func parseTransactionResponse(_ response: String) -> NMITransactionResponse {
         // NMI returns URL-encoded key=value pairs
         var params: [String: String] = [:]

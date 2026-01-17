@@ -7,6 +7,11 @@ struct TransactionDetailView: View {
     @State private var detail: TransactionDetail?
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var isVoiding = false
+    @State private var showVoidConfirmation = false
+    @State private var voidError: String?
+    @State private var showVoidError = false
+    @State private var voidSuccessful = false
 
     var body: some View {
         Group {
@@ -91,6 +96,10 @@ struct TransactionDetailView: View {
                     if !detail.actions.isEmpty {
                         activityCard(detail)
                     }
+
+                    if canVoidTransaction(detail) {
+                        actionsCard(detail)
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 24)
@@ -99,6 +108,30 @@ struct TransactionDetailView: View {
         }
         .background(Color(.systemGroupedBackground))
         .ignoresSafeArea(edges: .top)
+        .confirmationDialog(
+            "Void Transaction",
+            isPresented: $showVoidConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Void Transaction", role: .destructive) {
+                Task {
+                    await voidTransaction()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will cancel the transaction and release the hold on the customer's card. This cannot be undone.")
+        }
+        .alert("Void Failed", isPresented: $showVoidError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(voidError ?? "An unknown error occurred")
+        }
+        .alert("Transaction Voided", isPresented: $voidSuccessful) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The transaction has been successfully voided.")
+        }
     }
 
     // MARK: - Header Section
@@ -187,7 +220,7 @@ struct TransactionDetailView: View {
         VStack(spacing: 0) {
             infoRow(label: "Date", value: detail.transactionDate?.formattedDateTime ?? "—")
             Divider().padding(.leading, 16)
-            infoRow(label: "Transaction ID", value: String(detail.transactionId.prefix(12)) + "...")
+            infoRow(label: "Transaction ID", value: detail.transactionId)
             Divider().padding(.leading, 16)
             infoRow(label: "Status", value: detail.condition.capitalized, valueColor: statusColor(for: detail.status))
 
@@ -330,6 +363,93 @@ struct TransactionDetailView: View {
         }
         .background(Color(.systemBackground))
         .cornerRadius(12)
+    }
+
+    // MARK: - Actions Card
+
+    private func actionsCard(_ detail: TransactionDetail) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Actions")
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+
+            Button {
+                showVoidConfirmation = true
+            } label: {
+                HStack {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(.red)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Void Transaction")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+
+                        Text("Cancel this transaction before settlement")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    if isVoiding {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
+            .disabled(isVoiding)
+
+            Spacer().frame(height: 4)
+        }
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+    }
+
+    private func canVoidTransaction(_ detail: TransactionDetail) -> Bool {
+        let condition = detail.condition.lowercased()
+        // Can only void transactions that haven't settled yet
+        return condition == "pendingsettlement" || condition == "pending_settlement" || condition == "pending"
+    }
+
+    private func voidTransaction() async {
+        guard let detail = detail else { return }
+
+        isVoiding = true
+
+        do {
+            let response = try await NMIService.shared.voidTransaction(
+                securityKey: appState.securityKey,
+                transactionId: detail.transactionId
+            )
+
+            if response.isSuccess {
+                voidSuccessful = true
+                // Reload the transaction detail to show updated status
+                await loadDetail()
+            } else {
+                voidError = response.responseText
+                showVoidError = true
+            }
+        } catch let error as NMIError {
+            voidError = error.localizedDescription
+            showVoidError = true
+        } catch {
+            voidError = error.localizedDescription
+            showVoidError = true
+        }
+
+        isVoiding = false
     }
 
     // MARK: - Info Row
