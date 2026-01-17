@@ -73,10 +73,7 @@ struct NewSaleView: View {
         cardNumberDigits.isValidCardNumber &&
         expirationMonth.count == 2 &&
         expirationYear.count == 2 &&
-        cvv.isValidCVV &&
-        !firstName.isEmpty &&
-        !lastName.isEmpty &&
-        email.isValidEmail
+        cvv.isValidCVV
     }
 
     var body: some View {
@@ -95,47 +92,74 @@ struct NewSaleView: View {
         Form {
             // Amount Section
             Section {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Sale Amount")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    HStack {
-                        Text(appState.settings.currency.symbol)
-                            .font(.title)
+                if focusedField == .amount || amount == 0 {
+                    // Expanded view when focused or no amount entered
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Sale Amount")
+                            .font(.subheadline)
                             .foregroundStyle(.secondary)
 
-                        TextField("0.00", text: $amountString)
-                            .keyboardType(.decimalPad)
-                            .font(.system(size: 36, weight: .bold, design: .rounded))
-                            .focused($focusedField, equals: .amount)
-                    }
-                }
-                .padding(.vertical, 8)
-
-                if amount > 0 {
-                    HStack {
-                        Text("Subtotal")
-                        Spacer()
-                        Text(amount.formatted(as: appState.settings.currency))
-                    }
-
-                    if appState.settings.taxRate > 0 {
                         HStack {
-                            Text("Tax (\(appState.settings.taxRate.asPercentage))")
-                            Spacer()
-                            Text(taxAmount.formatted(as: appState.settings.currency))
+                            Text(appState.settings.currency.symbol)
+                                .font(.title)
+                                .foregroundStyle(.secondary)
+
+                            TextField("0.00", text: $amountString)
+                                .keyboardType(.decimalPad)
+                                .font(.system(size: 36, weight: .bold, design: .rounded))
+                                .focused($focusedField, equals: .amount)
                         }
                     }
+                    .padding(.vertical, 8)
 
-                    HStack {
-                        Text("Total")
-                            .fontWeight(.semibold)
-                        Spacer()
-                        Text(totalAmount.formatted(as: appState.settings.currency))
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.accent)
+                    if amount > 0 {
+                        HStack {
+                            Text("Subtotal")
+                            Spacer()
+                            Text(amount.formatted(as: appState.settings.currency))
+                        }
+
+                        if appState.settings.taxRate > 0 {
+                            HStack {
+                                Text("Tax (\(appState.settings.taxRate.asPercentage))")
+                                Spacer()
+                                Text(taxAmount.formatted(as: appState.settings.currency))
+                            }
+                        }
+
+                        HStack {
+                            Text("Total")
+                                .fontWeight(.semibold)
+                            Spacer()
+                            Text(totalAmount.formatted(as: appState.settings.currency))
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.accent)
+                        }
                     }
+                } else {
+                    // Compact view when not focused and amount is set
+                    Button {
+                        focusedField = .amount
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Total")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                Text(totalAmount.formatted(as: appState.settings.currency))
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundStyle(.primary)
+                            }
+
+                            Spacer()
+
+                            Image(systemName: "pencil.circle.fill")
+                                .font(.title2)
+                                .foregroundStyle(.accent)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
             } header: {
                 Text("Amount")
@@ -488,13 +512,9 @@ struct NewSaleView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
-
-                // Zigzag edge
-                ZigzagEdge()
-                    .fill(Color(.systemGroupedBackground))
-                    .frame(height: 12)
             }
             .background(Color(.systemBackground))
+            .cornerRadius(12)
             .padding(.horizontal, 20)
 
             // Buttons
@@ -701,33 +721,6 @@ struct NewSaleView: View {
     }
 }
 
-// MARK: - Zigzag Edge Shape
-
-struct ZigzagEdge: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let zigzagHeight: CGFloat = rect.height
-        let zigzagWidth: CGFloat = 12
-
-        path.move(to: CGPoint(x: 0, y: 0))
-
-        var x: CGFloat = 0
-        var goingUp = true
-
-        while x < rect.width {
-            x += zigzagWidth / 2
-            let y = goingUp ? zigzagHeight : 0
-            path.addLine(to: CGPoint(x: min(x, rect.width), y: y))
-            goingUp.toggle()
-        }
-
-        path.addLine(to: CGPoint(x: rect.width, y: 0))
-        path.closeSubpath()
-
-        return path
-    }
-}
-
 // MARK: - Receipt View (for sharing)
 
 struct ReceiptView: View {
@@ -826,13 +819,9 @@ struct ReceiptView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
-
-                // Zigzag edge
-                ZigzagEdge()
-                    .fill(Color(.systemGray6))
-                    .frame(height: 12)
             }
             .background(Color(.systemBackground))
+            .cornerRadius(12)
             .padding(.horizontal, 24)
 
             // Footer

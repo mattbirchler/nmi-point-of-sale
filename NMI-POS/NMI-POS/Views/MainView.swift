@@ -34,6 +34,25 @@ struct SaleTab: View {
     @State private var isLoadingSummary = false
     @State private var hasLoadedOnce = false
 
+    private var greeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        let firstName = appState.merchantProfile?.firstName ?? "there"
+
+        let timeGreeting: String
+        switch hour {
+        case 0..<12:
+            timeGreeting = "Good morning"
+        case 12..<17:
+            timeGreeting = "Good afternoon"
+        case 17..<22:
+            timeGreeting = "Good evening"
+        default:
+            timeGreeting = "Good night"
+        }
+
+        return "\(timeGreeting), \(firstName)"
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -97,7 +116,7 @@ struct SaleTab: View {
                 }
                 .padding(.horizontal, 20)
             }
-            .navigationTitle("iProcess")
+            .navigationTitle(greeting)
             .refreshable {
                 await loadDailySummary()
             }
