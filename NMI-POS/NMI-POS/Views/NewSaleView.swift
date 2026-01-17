@@ -50,6 +50,8 @@ struct NewSaleView: View {
     @State private var transactionResult: NMITransactionResponse?
     @State private var errorMessage: String?
     @State private var showShareSheet = false
+    @State private var isAmountExpanded = true
+    @State private var receiptAppeared = false
 
     private var amount: Double {
         Double(amountString) ?? 0
@@ -80,10 +82,19 @@ struct NewSaleView: View {
         NavigationStack {
             if showResult {
                 resultView
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .leading).combined(with: .opacity)
+                    ))
             } else {
                 formView
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .leading).combined(with: .opacity),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
+                    ))
             }
         }
+        .animation(.easeInOut(duration: 0.35), value: showResult)
     }
 
     // MARK: - Form View
@@ -92,7 +103,7 @@ struct NewSaleView: View {
         Form {
             // Amount Section
             Section {
-                if focusedField == .amount || amount == 0 {
+                if isAmountExpanded || amount == 0 {
                     // Expanded view when focused or no amount entered
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Sale Amount")
@@ -139,7 +150,12 @@ struct NewSaleView: View {
                 } else {
                     // Compact view when not focused and amount is set
                     Button {
-                        focusedField = .amount
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            isAmountExpanded = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            focusedField = .amount
+                        }
                     } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
@@ -163,6 +179,14 @@ struct NewSaleView: View {
                 }
             } header: {
                 Text("Amount")
+            }
+            .onChange(of: focusedField) { oldValue, newValue in
+                // Collapse when focus moves away from amount field
+                if oldValue == .amount && newValue != .amount && amount > 0 {
+                    withAnimation(.easeInOut(duration: 0.25)) {
+                        isAmountExpanded = false
+                    }
+                }
             }
 
             // Card Section
@@ -433,8 +457,17 @@ struct NewSaleView: View {
             }
             .padding(.trailing, 20)
             .padding(.top, 12)
+            .opacity(receiptAppeared ? 1 : 0)
         }
         .navigationBarBackButtonHidden(true)
+        .onAppear {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                receiptAppeared = true
+            }
+        }
+        .onDisappear {
+            receiptAppeared = false
+        }
     }
 
     private func successReceiptView(_ result: NMITransactionResponse) -> some View {
@@ -456,10 +489,14 @@ struct NewSaleView: View {
                     .background(Circle().fill(Color(.systemGroupedBackground)).padding(-2))
                     .offset(x: 28, y: 28)
             }
+            .scaleEffect(receiptAppeared ? 1 : 0.5)
+            .opacity(receiptAppeared ? 1 : 0)
 
             // Title
             Text("Payment Success!")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
+                .opacity(receiptAppeared ? 1 : 0)
+                .offset(y: receiptAppeared ? 0 : 20)
 
             // Receipt card
             VStack(spacing: 0) {
@@ -516,6 +553,8 @@ struct NewSaleView: View {
             .background(Color(.systemBackground))
             .cornerRadius(12)
             .padding(.horizontal, 20)
+            .opacity(receiptAppeared ? 1 : 0)
+            .offset(y: receiptAppeared ? 0 : 30)
 
             // Buttons
             VStack(spacing: 12) {
@@ -552,6 +591,8 @@ struct NewSaleView: View {
             .padding(.horizontal, 20)
             .padding(.top, 8)
             .padding(.bottom, 32)
+            .opacity(receiptAppeared ? 1 : 0)
+            .offset(y: receiptAppeared ? 0 : 40)
         }
     }
 
@@ -563,16 +604,22 @@ struct NewSaleView: View {
             Image(systemName: "xmark.circle.fill")
                 .font(.system(size: 80))
                 .foregroundStyle(.red)
+                .scaleEffect(receiptAppeared ? 1 : 0.5)
+                .opacity(receiptAppeared ? 1 : 0)
 
             Text("Payment Declined")
                 .font(.title)
                 .fontWeight(.bold)
+                .opacity(receiptAppeared ? 1 : 0)
+                .offset(y: receiptAppeared ? 0 : 20)
 
             Text(result.responseText)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
+                .opacity(receiptAppeared ? 1 : 0)
+                .offset(y: receiptAppeared ? 0 : 20)
 
             Spacer()
 
@@ -590,6 +637,8 @@ struct NewSaleView: View {
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 32)
+            .opacity(receiptAppeared ? 1 : 0)
+            .offset(y: receiptAppeared ? 0 : 40)
         }
     }
 
