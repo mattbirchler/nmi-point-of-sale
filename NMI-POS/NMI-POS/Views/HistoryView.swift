@@ -5,16 +5,19 @@ struct HistoryView: View {
     @State private var transactions: [Transaction] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var hasLoadedOnce = false
 
     var body: some View {
         NavigationStack {
             Group {
-                if isLoading && transactions.isEmpty {
+                if isLoading && !hasLoadedOnce {
                     loadingView
                 } else if let error = errorMessage, transactions.isEmpty {
                     errorView(error)
-                } else if transactions.isEmpty {
+                } else if transactions.isEmpty && hasLoadedOnce {
                     emptyView
+                } else if transactions.isEmpty {
+                    loadingView
                 } else {
                     transactionListView
                 }
@@ -24,7 +27,10 @@ struct HistoryView: View {
                 await loadTransactions()
             }
             .task {
-                await loadTransactions()
+                if !hasLoadedOnce {
+                    await loadTransactions()
+                    hasLoadedOnce = true
+                }
             }
         }
     }

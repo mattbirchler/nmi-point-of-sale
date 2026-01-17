@@ -290,9 +290,7 @@ struct NewSaleView: View {
                 }
             }
         }
-        .onTapGesture {
-            hideKeyboard()
-        }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     // MARK: - Result View

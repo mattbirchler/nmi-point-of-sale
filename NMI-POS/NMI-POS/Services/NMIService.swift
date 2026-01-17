@@ -1,4 +1,72 @@
 import Foundation
+import os.log
+
+// MARK: - API Logger
+
+struct APILogger {
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "NMI-POS", category: "API")
+
+    static func logRequest(endpoint: String, method: String, parameters: [String: String]) {
+        let maskedParams = maskSensitiveData(parameters)
+        let paramString = maskedParams.map { "\($0.key)=\($0.value)" }.joined(separator: "&")
+        logger.info("➡️ REQUEST [\(method)] \(endpoint)")
+        logger.info("   Parameters: \(paramString)")
+    }
+
+    static func logResponse(endpoint: String, statusCode: Int, body: String) {
+        let maskedBody = maskResponseBody(body)
+        logger.info("⬅️ RESPONSE [\(statusCode)] \(endpoint)")
+        logger.info("   Body: \(maskedBody)")
+    }
+
+    static func logError(endpoint: String, error: Error) {
+        logger.error("❌ ERROR \(endpoint): \(error.localizedDescription)")
+    }
+
+    private static func maskSensitiveData(_ params: [String: String]) -> [String: String] {
+        var masked = params
+
+        // Mask security key - show first 4 and last 4 chars
+        if let key = masked["security_key"], key.count > 8 {
+            let prefix = String(key.prefix(4))
+            let suffix = String(key.suffix(4))
+            masked["security_key"] = "\(prefix)****\(suffix)"
+        } else if masked["security_key"] != nil {
+            masked["security_key"] = "****"
+        }
+
+        // Mask card number - show last 4 only
+        if let ccNumber = masked["ccnumber"], ccNumber.count >= 4 {
+            let lastFour = String(ccNumber.suffix(4))
+            masked["ccnumber"] = "************\(lastFour)"
+        }
+
+        // Completely mask CVV
+        if masked["cvv"] != nil {
+            masked["cvv"] = "***"
+        }
+
+        return masked
+    }
+
+    private static func maskResponseBody(_ body: String) -> String {
+        var masked = body
+
+        // Mask any card numbers in response (pattern: 12+ digits)
+        let ccPattern = try? NSRegularExpression(pattern: "\\b\\d{12,19}\\b", options: [])
+        if let regex = ccPattern {
+            let range = NSRange(masked.startIndex..., in: masked)
+            masked = regex.stringByReplacingMatches(in: masked, options: [], range: range, withTemplate: "************$0".suffix(4).description)
+        }
+
+        // Truncate very long responses
+        if masked.count > 1000 {
+            masked = String(masked.prefix(1000)) + "...[truncated]"
+        }
+
+        return masked
+    }
+}
 
 enum NMIError: LocalizedError {
     case invalidCredentials
@@ -44,22 +112,38 @@ actor NMIService {
             throw NMIError.networkError("Invalid URL")
         }
 
+        // Log the request
+        APILogger.logRequest(
+            endpoint: queryURL,
+            method: "GET",
+            parameters: ["security_key": securityKey, "report_type": "profile"]
+        )
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 30
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            APILogger.logError(endpoint: queryURL, error: error)
+            throw NMIError.networkError(error.localizedDescription)
+        }
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw NMIError.networkError("Invalid response")
         }
 
-        guard httpResponse.statusCode == 200 else {
-            throw NMIError.networkError("Server returned status \(httpResponse.statusCode)")
-        }
-
         guard let xmlString = String(data: data, encoding: .utf8) else {
             throw NMIError.parseError("Unable to decode response")
+        }
+
+        // Log the response
+        APILogger.logResponse(endpoint: queryURL, statusCode: httpResponse.statusCode, body: xmlString)
+
+        guard httpResponse.statusCode == 200 else {
+            throw NMIError.networkError("Server returned status \(httpResponse.statusCode)")
         }
 
         return try parseProfileResponse(xmlString)
@@ -115,43 +199,57 @@ actor NMIService {
 
         let amountString = String(format: "%.2f", sale.total)
 
-        components.queryItems = [
-            URLQueryItem(name: "security_key", value: securityKey),
-            URLQueryItem(name: "type", value: "sale"),
-            URLQueryItem(name: "amount", value: amountString),
-            URLQueryItem(name: "ccnumber", value: sale.cardNumber),
-            URLQueryItem(name: "ccexp", value: sale.expiration),
-            URLQueryItem(name: "cvv", value: sale.cvv),
-            URLQueryItem(name: "first_name", value: sale.firstName),
-            URLQueryItem(name: "last_name", value: sale.lastName),
-            URLQueryItem(name: "address1", value: sale.address1),
-            URLQueryItem(name: "city", value: sale.city),
-            URLQueryItem(name: "state", value: sale.state),
-            URLQueryItem(name: "zip", value: sale.postalCode),
-            URLQueryItem(name: "country", value: sale.country),
-            URLQueryItem(name: "email", value: sale.email)
+        let params: [String: String] = [
+            "security_key": securityKey,
+            "type": "sale",
+            "amount": amountString,
+            "ccnumber": sale.cardNumber,
+            "ccexp": sale.expiration,
+            "cvv": sale.cvv,
+            "first_name": sale.firstName,
+            "last_name": sale.lastName,
+            "address1": sale.address1,
+            "city": sale.city,
+            "state": sale.state,
+            "zip": sale.postalCode,
+            "country": sale.country,
+            "email": sale.email
         ]
+
+        components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
 
         guard let url = components.url else {
             throw NMIError.networkError("Invalid URL")
         }
 
+        // Log the request
+        APILogger.logRequest(endpoint: transactURL, method: "POST", parameters: params)
+
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 60
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            APILogger.logError(endpoint: transactURL, error: error)
+            throw NMIError.networkError(error.localizedDescription)
+        }
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw NMIError.networkError("Invalid response")
         }
 
-        guard httpResponse.statusCode == 200 else {
-            throw NMIError.networkError("Server returned status \(httpResponse.statusCode)")
-        }
-
         guard let responseString = String(data: data, encoding: .utf8) else {
             throw NMIError.parseError("Unable to decode response")
+        }
+
+        // Log the response
+        APILogger.logResponse(endpoint: transactURL, statusCode: httpResponse.statusCode, body: responseString)
+
+        guard httpResponse.statusCode == 200 else {
+            throw NMIError.networkError("Server returned status \(httpResponse.statusCode)")
         }
 
         return parseTransactionResponse(responseString)
@@ -195,41 +293,53 @@ actor NMIService {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyyMMdd"
 
-        var queryItems = [
-            URLQueryItem(name: "security_key", value: securityKey),
-            URLQueryItem(name: "report_type", value: "transaction")
+        var params: [String: String] = [
+            "security_key": securityKey,
+            "report_type": "transaction"
         ]
 
         if let start = startDate {
-            queryItems.append(URLQueryItem(name: "start_date", value: dateFormatter.string(from: start)))
+            params["start_date"] = dateFormatter.string(from: start)
         }
 
         if let end = endDate {
-            queryItems.append(URLQueryItem(name: "end_date", value: dateFormatter.string(from: end)))
+            params["end_date"] = dateFormatter.string(from: end)
         }
 
-        components.queryItems = queryItems
+        components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
 
         guard let url = components.url else {
             throw NMIError.networkError("Invalid URL")
         }
 
+        // Log the request
+        APILogger.logRequest(endpoint: queryURL, method: "GET", parameters: params)
+
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = 30
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            APILogger.logError(endpoint: queryURL, error: error)
+            throw NMIError.networkError(error.localizedDescription)
+        }
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw NMIError.networkError("Invalid response")
         }
 
-        guard httpResponse.statusCode == 200 else {
-            throw NMIError.networkError("Server returned status \(httpResponse.statusCode)")
-        }
-
         guard let xmlString = String(data: data, encoding: .utf8) else {
             throw NMIError.parseError("Unable to decode response")
+        }
+
+        // Log the response
+        APILogger.logResponse(endpoint: queryURL, statusCode: httpResponse.statusCode, body: xmlString)
+
+        guard httpResponse.statusCode == 200 else {
+            throw NMIError.networkError("Server returned status \(httpResponse.statusCode)")
         }
 
         return parseTransactionsResponse(xmlString)
@@ -261,7 +371,8 @@ actor NMIService {
             let customerName = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces)
             let customerEmail = extractValue(from: transactionXml, tag: "email") ?? ""
 
-            let dateStr = extractValue(from: transactionXml, tag: "time") ?? ""
+            // Extract date from first <action> block's <date> field
+            let dateStr = extractDateFromAction(transactionXml) ?? ""
             let date = parseDate(dateStr) ?? Date()
 
             let responseText = extractValue(from: transactionXml, tag: "response_text") ?? ""
@@ -342,6 +453,19 @@ actor NMIService {
 
         let value = String(xml[openRange.upperBound..<closeRange.lowerBound])
         return value.isEmpty ? nil : value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func extractDateFromAction(_ xml: String) -> String? {
+        // Find the first <action> block
+        guard let actionStart = xml.range(of: "<action>"),
+              let actionEnd = xml.range(of: "</action>", range: actionStart.upperBound..<xml.endIndex) else {
+            return nil
+        }
+
+        let actionXml = String(xml[actionStart.upperBound..<actionEnd.lowerBound])
+
+        // Extract <date> from within the action block
+        return extractValue(from: actionXml, tag: "date")
     }
 
     private func parseDate(_ dateString: String) -> Date? {

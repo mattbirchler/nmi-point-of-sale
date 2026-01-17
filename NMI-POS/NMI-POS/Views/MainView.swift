@@ -32,73 +32,70 @@ struct SaleTab: View {
     @State private var showNewSale = false
     @State private var dailySummary: DailySummary = .empty
     @State private var isLoadingSummary = false
+    @State private var hasLoadedOnce = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
-                    // Daily Summary Card
-                    VStack(spacing: 16) {
-                        HStack {
-                            Text("Today's Revenue")
-                                .font(.headline)
-                            Spacer()
-                            if isLoadingSummary {
-                                ProgressView()
-                            }
-                        }
+                VStack(spacing: 32) {
+                    Spacer()
+                        .frame(height: 20)
 
-                        VStack(spacing: 8) {
+                    // Hero Revenue Display
+                    VStack(spacing: 12) {
+                        Text("Today's Revenue")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                            .tracking(1.2)
+
+                        if isLoadingSummary && !hasLoadedOnce {
+                            ProgressView()
+                                .scaleEffect(1.2)
+                                .frame(height: 60)
+                        } else {
                             Text(dailySummary.totalRevenue.formatted(as: appState.settings.currency))
-                                .font(.system(size: 42, weight: .bold, design: .rounded))
+                                .font(.system(size: 56, weight: .bold, design: .rounded))
                                 .foregroundStyle(.accent)
-
-                            Text("\(dailySummary.transactionCount) transaction\(dailySummary.transactionCount == 1 ? "" : "s")")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
                         }
-                    }
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color(.systemGray6))
-                    .cornerRadius(16)
 
-                    // New Sale Button
+                        Text("\(dailySummary.transactionCount) transaction\(dailySummary.transactionCount == 1 ? "" : "s") today")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 40)
+
+                    // New Sale Button - Big & Bold
                     Button {
                         showNewSale = true
                     } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
+                        HStack(spacing: 16) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 24, weight: .bold))
                             Text("New Sale")
-                                .font(.title3)
-                                .fontWeight(.semibold)
+                                .font(.title2)
+                                .fontWeight(.bold)
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .background(Color.accentColor)
+                        .padding(.vertical, 24)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.accentColor, Color.accentColor.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
                         .foregroundStyle(.white)
-                        .cornerRadius(16)
+                        .cornerRadius(20)
+                        .shadow(color: Color.accentColor.opacity(0.4), radius: 12, x: 0, y: 6)
                     }
-
-                    // Quick Info
-                    HStack(spacing: 16) {
-                        InfoCard(
-                            icon: "percent",
-                            title: "Tax Rate",
-                            value: appState.settings.taxRate.asPercentage
-                        )
-
-                        InfoCard(
-                            icon: "dollarsign.circle",
-                            title: "Currency",
-                            value: appState.settings.currency.rawValue
-                        )
-                    }
+                    .padding(.horizontal, 4)
 
                     Spacer()
                 }
-                .padding()
+                .padding(.horizontal, 20)
             }
             .navigationTitle("Point of Sale")
             .refreshable {
@@ -112,7 +109,10 @@ struct SaleTab: View {
                 })
             }
             .task {
-                await loadDailySummary()
+                if !hasLoadedOnce {
+                    await loadDailySummary()
+                    hasLoadedOnce = true
+                }
             }
         }
     }
@@ -126,31 +126,6 @@ struct SaleTab: View {
             dailySummary = .empty
         }
         isLoadingSummary = false
-    }
-}
-
-struct InfoCard: View {
-    let icon: String
-    let title: String
-    let value: String
-
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundStyle(.accent)
-
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Text(value)
-                .font(.headline)
-        }
-        .frame(maxWidth: .infinity)
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
     }
 }
 
