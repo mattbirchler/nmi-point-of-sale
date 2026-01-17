@@ -578,7 +578,7 @@ struct TransactionRow: View {
 
                 Spacer()
 
-                Text("\(String(transaction.transactionId.prefix(12)))...")
+                Text(transaction.transactionId)
                     .font(.caption)
                     .monospaced()
                     .foregroundStyle(.secondary)
