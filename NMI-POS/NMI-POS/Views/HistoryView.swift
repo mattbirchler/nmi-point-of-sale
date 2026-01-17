@@ -23,6 +23,35 @@ struct HistoryView: View {
                 }
             }
             .navigationTitle("Transaction History")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        ForEach(HistoryDateRange.allCases) { range in
+                            Button {
+                                appState.settings.historyDateRange = range
+                                Task {
+                                    await loadTransactions()
+                                }
+                            } label: {
+                                HStack {
+                                    Text(range.displayName)
+                                    if appState.settings.historyDateRange == range {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(appState.settings.historyDateRange.displayName)
+                                .font(.subheadline)
+                            Image(systemName: "chevron.down")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.accentColor)
+                    }
+                }
+            }
             .refreshable {
                 await loadTransactions()
             }
@@ -88,10 +117,10 @@ struct HistoryView: View {
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
 
-            Text("No Transactions Yet")
+            Text("No Transactions Found")
                 .font(.headline)
 
-            Text("Your recent transactions will appear here")
+            Text("No transactions in the \(appState.settings.historyDateRange.displayName.lowercased())")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -123,10 +152,8 @@ struct HistoryView: View {
         errorMessage = nil
 
         do {
-            // Load last 30 days of transactions
-            let calendar = Calendar.current
             let endDate = Date()
-            let startDate = calendar.date(byAdding: .day, value: -30, to: endDate) ?? endDate
+            let startDate = appState.settings.historyDateRange.startDate
 
             transactions = try await NMIService.shared.getTransactions(
                 securityKey: appState.securityKey,

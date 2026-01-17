@@ -40,12 +40,56 @@ struct AppSettings: Codable, Equatable {
     var currency: Currency
     var taxRate: Double
     var hasCompletedOnboarding: Bool
+    var historyDateRange: HistoryDateRange
 
     static let `default` = AppSettings(
         currency: .usd,
         taxRate: 0.0,
-        hasCompletedOnboarding: false
+        hasCompletedOnboarding: false,
+        historyDateRange: .last30Days
     )
+}
+
+enum HistoryDateRange: String, Codable, CaseIterable, Identifiable {
+    case last7Days = "last_7_days"
+    case last30Days = "last_30_days"
+    case last90Days = "last_90_days"
+    case last6Months = "last_6_months"
+    case lastYear = "last_year"
+    case allTime = "all_time"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .last7Days: return "Last 7 Days"
+        case .last30Days: return "Last 30 Days"
+        case .last90Days: return "Last 90 Days"
+        case .last6Months: return "Last 6 Months"
+        case .lastYear: return "Last Year"
+        case .allTime: return "All Time"
+        }
+    }
+
+    var startDate: Date? {
+        let calendar = Calendar.current
+        let now = Date()
+
+        switch self {
+        case .last7Days:
+            return calendar.date(byAdding: .day, value: -7, to: now)
+        case .last30Days:
+            return calendar.date(byAdding: .day, value: -30, to: now)
+        case .last90Days:
+            return calendar.date(byAdding: .day, value: -90, to: now)
+        case .last6Months:
+            return calendar.date(byAdding: .month, value: -6, to: now)
+        case .lastYear:
+            return calendar.date(byAdding: .year, value: -1, to: now)
+        case .allTime:
+            return nil
+        }
+    }
 }
 
 enum Currency: String, Codable, CaseIterable, Identifiable {
