@@ -161,6 +161,20 @@ class AppState: ObservableObject {
         saveSettings()
     }
 
+    func updateSurchargeEnabled(_ enabled: Bool) {
+        settings.surchargeEnabled = enabled
+        if !enabled {
+            settings.surchargeRate = 0
+        }
+        saveSettings()
+    }
+
+    func updateSurchargeRate(_ rate: Double) {
+        // Clamp to 0-3%
+        settings.surchargeRate = min(max(rate, 0), 3)
+        saveSettings()
+    }
+
     // MARK: - Helpers
 
     var securityKey: String {

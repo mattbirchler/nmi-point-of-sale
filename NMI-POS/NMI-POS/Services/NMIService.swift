@@ -91,9 +91,39 @@ enum NMIError: LocalizedError {
     }
 }
 
+// MARK: - Card Funding Type
+
+enum CardFundingType: String, Codable {
+    case credit = "credit"
+    case debit = "debit"
+    case prepaid = "prepaid"
+    case charge = "charge"
+    case deferredDebit = "deferred_debit"
+    case unknown = "unknown"
+    case unavailable = "unavailable"
+
+    var isCreditCard: Bool {
+        self == .credit
+    }
+
+    var displayName: String {
+        switch self {
+        case .credit: return "Credit"
+        case .debit: return "Debit"
+        case .prepaid: return "Prepaid"
+        case .charge: return "Charge"
+        case .deferredDebit: return "Deferred Debit"
+        case .unknown: return "Unknown"
+        case .unavailable: return "Unavailable"
+        }
+    }
+}
+
 actor NMIService {
     private let queryURL = "https://secure.nmi.com/api/query.php"
     private let transactURL = "https://secure.nmi.com/api/transact.php"
+    private let cardTypeURL = "https://secure.nmi.com/api/v4/card_type"
+    private let cardTypeAPIKey = "v4_secret_9ffQ5Mk7J767W3Deg2EPa9nH5257h22B"
 
     static let shared = NMIService()
 
@@ -656,6 +686,69 @@ actor NMIService {
         }
 
         return actions
+    }
+
+    // MARK: - Card Type Lookup
+
+    func lookupCardType(cardNumber: String) async throws -> CardFundingType {
+        // Extract first 6 digits (BIN/IIN)
+        let digits = cardNumber.filter { $0.isNumber }
+        guard digits.count >= 6 else {
+            return .unknown
+        }
+        let bin = String(digits.prefix(6))
+
+        guard let url = URL(string: cardTypeURL) else {
+            throw NMIError.networkError("Invalid URL")
+        }
+
+        // Log the request (mask the card number)
+        APILogger.logRequest(endpoint: cardTypeURL, method: "POST", parameters: ["ccnumber": "******"])
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(cardTypeAPIKey, forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+
+        let body = ["ccnumber": bin]
+        request.httpBody = try? JSONEncoder().encode(body)
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            APILogger.logError(endpoint: cardTypeURL, error: error)
+            // Return unknown on network error so transaction can still proceed
+            return .unknown
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            return .unknown
+        }
+
+        guard let responseString = String(data: data, encoding: .utf8) else {
+            return .unknown
+        }
+
+        // Log the response
+        APILogger.logResponse(endpoint: cardTypeURL, statusCode: httpResponse.statusCode, body: responseString)
+
+        guard httpResponse.statusCode == 200 else {
+            return .unknown
+        }
+
+        // Parse JSON response
+        struct CardTypeResponse: Decodable {
+            let result: String
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode(CardTypeResponse.self, from: data)
+            return CardFundingType(rawValue: decoded.result) ?? .unknown
+        } catch {
+            return .unknown
+        }
     }
 
     // MARK: - Helpers

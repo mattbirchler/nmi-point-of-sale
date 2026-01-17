@@ -53,16 +53,37 @@ struct NewSaleView: View {
     @State private var isAmountExpanded = true
     @State private var receiptAppeared = false
 
+    // Surcharge state
+    @State private var cardFundingType: CardFundingType?
+    @State private var isCheckingCardType = false
+
     private var amount: Double {
         Double(amountString) ?? 0
     }
 
+    // Surcharge applies only to credit cards when enabled
+    private var surchargeApplies: Bool {
+        appState.settings.surchargeEnabled &&
+        appState.settings.surchargeRate > 0 &&
+        cardFundingType == .credit
+    }
+
+    private var surchargeAmount: Double {
+        guard surchargeApplies else { return 0 }
+        return amount * (appState.settings.surchargeRate / 100)
+    }
+
+    // Taxable base = subtotal + surcharge
+    private var taxableAmount: Double {
+        amount + surchargeAmount
+    }
+
     private var taxAmount: Double {
-        amount * (appState.settings.taxRate / 100)
+        taxableAmount * (appState.settings.taxRate / 100)
     }
 
     private var totalAmount: Double {
-        amount + taxAmount
+        amount + surchargeAmount + taxAmount
     }
 
     // Card number without spaces for validation
@@ -130,6 +151,23 @@ struct NewSaleView: View {
                             Text(amount.formatted(as: appState.settings.currency))
                         }
 
+                        if surchargeApplies {
+                            HStack {
+                                Text("Surcharge (\(appState.settings.surchargeRate.asPercentage))")
+                                Spacer()
+                                Text(surchargeAmount.formatted(as: appState.settings.currency))
+                            }
+                            .foregroundStyle(.orange)
+                        } else if appState.settings.surchargeEnabled && cardFundingType != nil && cardFundingType != .credit {
+                            HStack {
+                                Text("Surcharge")
+                                Spacer()
+                                Text("N/A (\(cardFundingType?.displayName ?? "Non-credit") card)")
+                                    .font(.caption)
+                            }
+                            .foregroundStyle(.secondary)
+                        }
+
                         if appState.settings.taxRate > 0 {
                             HStack {
                                 Text("Tax (\(appState.settings.taxRate.asPercentage))")
@@ -187,20 +225,58 @@ struct NewSaleView: View {
                         isAmountExpanded = false
                     }
                 }
+
+                // Check card type when focus leaves card number field (for surcharging)
+                if oldValue == .cardNumber && newValue != .cardNumber {
+                    Task {
+                        await checkCardType()
+                    }
+                }
             }
 
             // Card Section
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Card Number")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack {
+                        Text("Card Number")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+
+                        // Show card type status when surcharging is enabled
+                        if appState.settings.surchargeEnabled {
+                            if isCheckingCardType {
+                                HStack(spacing: 4) {
+                                    ProgressView()
+                                        .scaleEffect(0.7)
+                                    Text("Checking...")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } else if let fundingType = cardFundingType {
+                                HStack(spacing: 4) {
+                                    Image(systemName: fundingType.isCreditCard ? "creditcard.fill" : "creditcard")
+                                        .font(.caption)
+                                    Text(fundingType.displayName)
+                                        .font(.caption)
+                                }
+                                .foregroundStyle(fundingType.isCreditCard ? .orange : .secondary)
+                            }
+                        }
+                    }
                     TextField("4111 1111 1111 1111", text: $cardNumber)
                         .keyboardType(.numberPad)
                         .textContentType(.creditCardNumber)
                         .focused($focusedField, equals: .cardNumber)
                         .onChange(of: cardNumber) { oldValue, newValue in
                             cardNumber = formatCardNumber(newValue)
+                            // Reset card type when card number changes significantly
+                            let oldDigits = oldValue.filter { $0.isNumber }
+                            let newDigits = newValue.filter { $0.isNumber }
+                            if oldDigits.prefix(6) != newDigits.prefix(6) {
+                                cardFundingType = nil
+                            }
                         }
                 }
 
@@ -493,7 +569,7 @@ struct NewSaleView: View {
             .opacity(receiptAppeared ? 1 : 0)
 
             // Title
-            Text("Payment Success!")
+            Text("Transaction Receipt")
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .opacity(receiptAppeared ? 1 : 0)
                 .offset(y: receiptAppeared ? 0 : 20)
@@ -514,7 +590,11 @@ struct NewSaleView: View {
                 // Details rows
                 VStack(spacing: 14) {
                     receiptDetailRow("Customer", value: "\(firstName) \(lastName)")
-                    receiptDetailRow("Amount", value: amount.formatted(as: appState.settings.currency))
+                    receiptDetailRow("Subtotal", value: amount.formatted(as: appState.settings.currency))
+
+                    if surchargeAmount > 0 {
+                        receiptDetailRow("Surcharge (\(appState.settings.surchargeRate.asPercentage))", value: surchargeAmount.formatted(as: appState.settings.currency))
+                    }
 
                     if taxAmount > 0 {
                         receiptDetailRow("Tax", value: taxAmount.formatted(as: appState.settings.currency))
@@ -687,6 +767,8 @@ struct NewSaleView: View {
             amount: totalAmount,
             tax: taxAmount,
             subtotal: amount,
+            surcharge: surchargeAmount,
+            surchargeRate: appState.settings.surchargeRate,
             currency: appState.settings.currency,
             cardType: detectCardType(cardNumberDigits),
             lastFour: String(cardNumberDigits.suffix(4)),
@@ -727,6 +809,29 @@ struct NewSaleView: View {
             return "Discover"
         }
         return "Card"
+    }
+
+    // MARK: - Card Type Check
+
+    private func checkCardType() async {
+        // Only check if surcharging is enabled and we have enough digits
+        guard appState.settings.surchargeEnabled,
+              cardNumberDigits.count >= 6 else {
+            cardFundingType = nil
+            return
+        }
+
+        isCheckingCardType = true
+
+        do {
+            let fundingType = try await NMIService.shared.lookupCardType(cardNumber: cardNumberDigits)
+            cardFundingType = fundingType
+        } catch {
+            // On error, assume unknown (no surcharge applied)
+            cardFundingType = .unknown
+        }
+
+        isCheckingCardType = false
     }
 
     // MARK: - Actions
@@ -778,6 +883,8 @@ struct ReceiptView: View {
     let amount: Double
     let tax: Double
     let subtotal: Double
+    let surcharge: Double
+    let surchargeRate: Double
     let currency: Currency
     let cardType: String
     let lastFour: String
@@ -807,7 +914,7 @@ struct ReceiptView: View {
                         .offset(x: 24, y: 24)
                 }
 
-                Text("Payment Success!")
+                Text("Transaction Receipt")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
 
                 Text(merchantName)
@@ -833,7 +940,11 @@ struct ReceiptView: View {
                 // Details rows
                 VStack(spacing: 12) {
                     shareReceiptRow("Customer", value: customerName)
-                    shareReceiptRow("Amount", value: subtotal.formatted(as: currency))
+                    shareReceiptRow("Subtotal", value: subtotal.formatted(as: currency))
+
+                    if surcharge > 0 {
+                        shareReceiptRow("Surcharge (\(surchargeRate.asPercentage))", value: surcharge.formatted(as: currency))
+                    }
 
                     if tax > 0 {
                         shareReceiptRow("Tax", value: tax.formatted(as: currency))
@@ -914,7 +1025,9 @@ struct ReceiptView: View {
         authCode: "ABC123",
         amount: 125.50,
         tax: 10.50,
-        subtotal: 115.00,
+        subtotal: 112.00,
+        surcharge: 3.00,
+        surchargeRate: 2.68,
         currency: .usd,
         cardType: "Visa",
         lastFour: "4242",

@@ -41,12 +41,16 @@ struct AppSettings: Codable, Equatable {
     var taxRate: Double
     var hasCompletedOnboarding: Bool
     var historyDateRange: HistoryDateRange
+    var surchargeEnabled: Bool
+    var surchargeRate: Double  // Percentage (0.00 - 3.00)
 
     static let `default` = AppSettings(
         currency: .usd,
         taxRate: 0.0,
         hasCompletedOnboarding: false,
-        historyDateRange: .last30Days
+        historyDateRange: .last30Days,
+        surchargeEnabled: false,
+        surchargeRate: 0.0
     )
 }
 
