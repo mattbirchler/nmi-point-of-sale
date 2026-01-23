@@ -66,131 +66,132 @@ struct SaleTab: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    Spacer()
-                        .frame(height: 8)
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        Spacer()
+                            .frame(height: 8)
 
-                    // Weekly Volume Chart
-                    if !weeklyData.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Last 7 Days")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundStyle(.secondary)
-                                .textCase(.uppercase)
-                                .tracking(1)
+                        // Weekly Volume Chart
+                        if !weeklyData.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Last 7 Days")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(.secondary)
+                                    .textCase(.uppercase)
+                                    .tracking(1)
 
-                            Chart(weeklyData) { day in
-                                BarMark(
-                                    x: .value("Date", day.date, unit: .day),
-                                    y: .value("Revenue", day.revenue)
-                                )
-                                .foregroundStyle(Color.accentColor.gradient)
-                                .cornerRadius(4)
-                            }
-                            .chartXAxis {
-                                AxisMarks(values: .stride(by: .day)) { value in
-                                    AxisValueLabel(format: .dateTime.weekday(.narrow))
-                                        .font(.caption2)
+                                Chart(weeklyData) { day in
+                                    BarMark(
+                                        x: .value("Date", day.date, unit: .day),
+                                        y: .value("Revenue", day.revenue)
+                                    )
+                                    .foregroundStyle(Color.accentColor.gradient)
+                                    .cornerRadius(4)
                                 }
-                            }
-                            .chartYAxis {
-                                AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
-                                    AxisGridLine()
-                                        .foregroundStyle(Color(.systemGray5))
-                                    AxisValueLabel {
-                                        if let revenue = value.as(Double.self) {
-                                            Text(formatChartValue(revenue))
-                                                .font(.caption2)
+                                .chartXAxis {
+                                    AxisMarks(values: .stride(by: .day)) { value in
+                                        AxisValueLabel(format: .dateTime.weekday(.narrow))
+                                            .font(.caption2)
+                                    }
+                                }
+                                .chartYAxis {
+                                    AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                                        AxisGridLine()
+                                            .foregroundStyle(Color(.systemGray5))
+                                        AxisValueLabel {
+                                            if let revenue = value.as(Double.self) {
+                                                Text(formatChartValue(revenue))
+                                                    .font(.caption2)
+                                            }
                                         }
                                     }
                                 }
+                                .frame(height: 100)
+                            }
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(16)
+                        } else if isLoadingWeekly && !hasLoadedOnce {
+                            VStack {
+                                ProgressView()
                             }
                             .frame(height: 100)
+                            .frame(maxWidth: .infinity)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(16)
                         }
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(16)
-                    } else if isLoadingWeekly && !hasLoadedOnce {
-                        VStack {
-                            ProgressView()
-                        }
-                        .frame(height: 100)
-                        .frame(maxWidth: .infinity)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(16)
-                    }
 
-                    // Hero Revenue Display
-                    VStack(spacing: 12) {
-                        Text("Today's Revenue")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-                            .tracking(1.2)
+                        // Hero Revenue Display
+                        VStack(spacing: 12) {
+                            Text("Today's Revenue")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.secondary)
+                                .textCase(.uppercase)
+                                .tracking(1.2)
 
-                        if isLoadingSummary && !hasLoadedOnce {
-                            ProgressView()
-                                .scaleEffect(1.2)
-                                .frame(height: 60)
-                        } else {
+                            if isLoadingSummary && !hasLoadedOnce {
+                                ProgressView()
+                                    .scaleEffect(1.2)
+                                    .frame(height: 60)
+                            } else {
+                                Button {
+                                    onTodayRevenueTapped()
+                                } label: {
+                                    Text(dailySummary.totalRevenue.formatted(as: appState.settings.currency))
+                                        .font(.system(size: 56, weight: .bold, design: .rounded))
+                                        .foregroundStyle(.accent)
+                                }
+                                .buttonStyle(.plain)
+                            }
+
                             Button {
                                 onTodayRevenueTapped()
                             } label: {
-                                Text(dailySummary.totalRevenue.formatted(as: appState.settings.currency))
-                                    .font(.system(size: 56, weight: .bold, design: .rounded))
-                                    .foregroundStyle(.accent)
+                                HStack(spacing: 4) {
+                                    Text("\(dailySummary.transactionCount) transaction\(dailySummary.transactionCount == 1 ? "" : "s") today")
+                                        .font(.callout)
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                }
+                                .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
                         }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 32)
+                    }
+                    .padding(.horizontal, 20)
+                }
 
-                        Button {
-                            onTodayRevenueTapped()
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text("\(dailySummary.transactionCount) transaction\(dailySummary.transactionCount == 1 ? "" : "s") today")
-                                    .font(.callout)
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                            }
-                            .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.plain)
+                // New Sale Button - Pinned at bottom
+                Button {
+                    showNewSale = true
+                } label: {
+                    HStack(spacing: 16) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 24, weight: .bold))
+                        Text("New Sale")
+                            .font(.title2)
+                            .fontWeight(.bold)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 32)
-
-                    // New Sale Button - Big & Bold
-                    Button {
-                        showNewSale = true
-                    } label: {
-                        HStack(spacing: 16) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 24, weight: .bold))
-                            Text("New Sale")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 24)
-                        .background(
-                            LinearGradient(
-                                colors: [Color.accentColor, Color.accentColor.opacity(0.8)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+                    .padding(.vertical, 20)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.accentColor, Color.accentColor.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
                         )
-                        .foregroundStyle(.white)
-                        .cornerRadius(20)
-                        .shadow(color: Color.accentColor.opacity(0.4), radius: 12, x: 0, y: 6)
-                    }
-                    .padding(.horizontal, 4)
-
-                    Spacer()
+                    )
+                    .foregroundStyle(.white)
+                    .cornerRadius(16)
+                    .shadow(color: Color.accentColor.opacity(0.4), radius: 12, x: 0, y: 6)
                 }
                 .padding(.horizontal, 20)
+                .padding(.bottom, 20)
             }
             .navigationTitle(greeting)
             .refreshable {
