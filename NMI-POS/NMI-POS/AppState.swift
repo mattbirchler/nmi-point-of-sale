@@ -292,13 +292,14 @@ class AppState: ObservableObject {
         let context = LAContext()
         var error: NSError?
 
-        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+        // Use deviceOwnerAuthentication to allow passcode fallback
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
             return false
         }
 
         do {
             let success = try await context.evaluatePolicy(
-                .deviceOwnerAuthenticationWithBiometrics,
+                .deviceOwnerAuthentication,
                 localizedReason: "Unlock iProcess to access your payment terminal"
             )
             if success {
