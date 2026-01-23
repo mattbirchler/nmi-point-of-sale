@@ -43,6 +43,8 @@ struct AppSettings: Codable, Equatable {
     var historyDateRange: HistoryDateRange
     var surchargeEnabled: Bool
     var surchargeRate: Double  // Percentage (0.00 - 3.00)
+    var tippingEnabled: Bool
+    var tipPercentages: [Double]  // Up to 3 custom tip percentages
 
     static let `default` = AppSettings(
         currency: .usd,
@@ -50,7 +52,9 @@ struct AppSettings: Codable, Equatable {
         hasCompletedOnboarding: false,
         historyDateRange: .last30Days,
         surchargeEnabled: false,
-        surchargeRate: 0.0
+        surchargeRate: 0.0,
+        tippingEnabled: false,
+        tipPercentages: [15, 20, 25]
     )
 }
 
@@ -183,6 +187,7 @@ enum TransactionStatus: String, Codable {
 struct SaleRequest {
     let amount: Double
     let tax: Double
+    let tip: Double
     let cardNumber: String
     let expirationMonth: String
     let expirationYear: String
@@ -197,7 +202,7 @@ struct SaleRequest {
     let email: String
 
     var total: Double {
-        amount + tax
+        amount + tax + tip
     }
 
     var expiration: String {

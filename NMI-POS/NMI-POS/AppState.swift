@@ -139,9 +139,20 @@ class AppState: ObservableObject {
         currentScreen = .onboarding
     }
 
-    func completeOnboarding(currency: Currency, taxRate: Double) {
+    func completeOnboarding(
+        currency: Currency,
+        taxRate: Double,
+        surchargeEnabled: Bool = false,
+        surchargeRate: Double = 0,
+        tippingEnabled: Bool = false,
+        tipPercentages: [Double] = [15, 20, 25]
+    ) {
         settings.currency = currency
         settings.taxRate = taxRate
+        settings.surchargeEnabled = surchargeEnabled
+        settings.surchargeRate = surchargeRate
+        settings.tippingEnabled = tippingEnabled
+        settings.tipPercentages = tipPercentages
         settings.hasCompletedOnboarding = true
 
         saveSettings()
@@ -172,6 +183,17 @@ class AppState: ObservableObject {
     func updateSurchargeRate(_ rate: Double) {
         // Clamp to 0-3%
         settings.surchargeRate = min(max(rate, 0), 3)
+        saveSettings()
+    }
+
+    func updateTippingEnabled(_ enabled: Bool) {
+        settings.tippingEnabled = enabled
+        saveSettings()
+    }
+
+    func updateTipPercentages(_ percentages: [Double]) {
+        // Limit to 3 tip percentages, clamp each to 0-100%
+        settings.tipPercentages = percentages.prefix(3).map { min(max($0, 0), 100) }
         saveSettings()
     }
 

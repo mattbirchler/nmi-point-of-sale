@@ -229,7 +229,7 @@ actor NMIService {
 
         let amountString = String(format: "%.2f", sale.total)
 
-        let params: [String: String] = [
+        var params: [String: String] = [
             "security_key": securityKey,
             "type": "sale",
             "amount": amountString,
@@ -245,6 +245,11 @@ actor NMIService {
             "country": sale.country,
             "email": sale.email
         ]
+
+        // Add tip if present
+        if sale.tip > 0 {
+            params["tip"] = String(format: "%.2f", sale.tip)
+        }
 
         components.queryItems = params.map { URLQueryItem(name: $0.key, value: $0.value) }
 

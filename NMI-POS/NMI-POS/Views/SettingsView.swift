@@ -7,6 +7,8 @@ struct SettingsView: View {
     @State private var showSignOutAlert = false
     @State private var showSurchargeWarning = false
     @State private var pendingSurchargeEnable = false
+    @State private var tipStrings: [String] = ["", "", ""]
+    @State private var editingTipIndex: Int?
 
     var body: some View {
         NavigationStack {
@@ -134,6 +136,87 @@ struct SettingsView: View {
                     }
                 }
 
+                // Tipping Section
+                Section {
+                    Toggle("Enable Tipping", isOn: Binding(
+                        get: { appState.settings.tippingEnabled },
+                        set: { appState.updateTippingEnabled($0) }
+                    ))
+
+                    if appState.settings.tippingEnabled {
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Quick Tip Options")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .padding(.top, 4)
+
+                            HStack(spacing: 12) {
+                                ForEach(0..<3, id: \.self) { index in
+                                    TipPercentageCard(
+                                        percentage: tipStrings[index],
+                                        isEditing: editingTipIndex == index,
+                                        accentColor: tipCardColor(for: index),
+                                        onTap: {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                editingTipIndex = index
+                                            }
+                                        },
+                                        onUpdate: { newValue in
+                                            tipStrings[index] = newValue
+                                            if let value = Double(newValue) {
+                                                var percentages = appState.settings.tipPercentages
+                                                while percentages.count <= index {
+                                                    percentages.append(0)
+                                                }
+                                                percentages[index] = value
+                                                appState.updateTipPercentages(percentages)
+                                            }
+                                        },
+                                        onCommit: {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                                editingTipIndex = nil
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        .padding(.vertical, 8)
+
+                        // Preview of tip amounts
+                        if appState.settings.tipPercentages.contains(where: { $0 > 0 }) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Preview on \(appState.settings.currency.symbol)100")
+                                    .font(.caption)
+                                    .foregroundStyle(.tertiary)
+
+                                HStack(spacing: 8) {
+                                    ForEach(Array(appState.settings.tipPercentages.enumerated()), id: \.offset) { index, percentage in
+                                        if percentage > 0 {
+                                            HStack(spacing: 4) {
+                                                Circle()
+                                                    .fill(tipCardColor(for: index))
+                                                    .frame(width: 6, height: 6)
+                                                Text("\(appState.settings.currency.symbol)\(String(format: "%.0f", percentage))")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Tipping")
+                } footer: {
+                    if appState.settings.tippingEnabled {
+                        Text("Customers will see these quick tip options during checkout. They can also enter a custom amount.")
+                    } else {
+                        Text("Enable tipping to let customers add gratuity during checkout.")
+                    }
+                }
+
                 // Currency Section
                 Section {
                     Picker("Currency", selection: Binding(
@@ -185,6 +268,10 @@ struct SettingsView: View {
             .onAppear {
                 taxRateString = String(format: "%.2f", appState.settings.taxRate)
                 surchargeRateString = String(format: "%.2f", appState.settings.surchargeRate)
+                // Initialize tip strings
+                for (index, percentage) in appState.settings.tipPercentages.enumerated() where index < 3 {
+                    tipStrings[index] = percentage > 0 ? String(format: "%.0f", percentage) : ""
+                }
             }
             .alert("Sign Out", isPresented: $showSignOutAlert) {
                 Button("Cancel", role: .cancel) {}
@@ -209,6 +296,88 @@ struct SettingsView: View {
                 hideKeyboard()
             }
         }
+    }
+
+    private func tipCardColor(for index: Int) -> Color {
+        switch index {
+        case 0: return Color(red: 0.35, green: 0.78, blue: 0.62)  // Mint green
+        case 1: return Color(red: 0.40, green: 0.65, blue: 0.95)  // Sky blue
+        case 2: return Color(red: 0.95, green: 0.60, blue: 0.40)  // Warm coral
+        default: return .accentColor
+        }
+    }
+}
+
+// MARK: - Tip Percentage Card
+
+struct TipPercentageCard: View {
+    let percentage: String
+    let isEditing: Bool
+    let accentColor: Color
+    let onTap: () -> Void
+    let onUpdate: (String) -> Void
+    let onCommit: () -> Void
+
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        ZStack {
+            // Background
+            RoundedRectangle(cornerRadius: 16)
+                .fill(
+                    isEditing
+                        ? accentColor.opacity(0.15)
+                        : Color(.systemGray6)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(
+                            isEditing ? accentColor : Color.clear,
+                            lineWidth: 2
+                        )
+                )
+
+            VStack(spacing: 4) {
+                if isEditing {
+                    TextField("0", text: Binding(
+                        get: { percentage },
+                        set: { newValue in
+                            // Only allow digits
+                            let filtered = newValue.filter { $0.isNumber }
+                            if filtered.count <= 3 {
+                                onUpdate(filtered)
+                            }
+                        }
+                    ))
+                    .keyboardType(.numberPad)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .multilineTextAlignment(.center)
+                    .focused($isFocused)
+                    .onAppear { isFocused = true }
+                    .onChange(of: isFocused) { _, newValue in
+                        if !newValue {
+                            onCommit()
+                        }
+                    }
+                } else {
+                    Text(percentage.isEmpty ? "—" : percentage)
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(percentage.isEmpty ? .tertiary : .primary)
+                }
+
+                Text("%")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(isEditing ? accentColor : .secondary)
+            }
+        }
+        .frame(height: 80)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if !isEditing {
+                onTap()
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isEditing)
     }
 }
 

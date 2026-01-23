@@ -36,7 +36,8 @@ struct SaleTab: View {
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
-        let firstName = appState.merchantProfile?.firstName ?? "there"
+        let profileFirstName = appState.merchantProfile?.firstName ?? ""
+        let firstName = profileFirstName.isEmpty ? "Matt" : profileFirstName
 
         let timeGreeting: String
         switch hour {
