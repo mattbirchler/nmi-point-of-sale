@@ -397,7 +397,7 @@ struct OnboardingView: View {
             VStack(spacing: 12) {
                 Image(systemName: appState.biometricIconName)
                     .font(.system(size: 64))
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.accent)
 
                 Text("Secure Your App")
                     .font(.title)
@@ -421,7 +421,7 @@ struct OnboardingView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                .tint(.blue)
+                .tint(.accent)
                 .padding()
                 .background(Color(.systemGray6))
                 .cornerRadius(12)
@@ -429,14 +429,14 @@ struct OnboardingView: View {
                 if biometricEnabled {
                     HStack(spacing: 12) {
                         Image(systemName: "checkmark.shield.fill")
-                            .foregroundStyle(.blue)
+                            .foregroundStyle(.accent)
                         Text("Your payment data will be protected")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.blue.opacity(0.1))
+                    .background(Color.accentColor.opacity(0.1))
                     .cornerRadius(12)
                 }
             }

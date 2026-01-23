@@ -37,12 +37,12 @@ struct LockedView: View {
             VStack(spacing: 16) {
                 ZStack {
                     Circle()
-                        .fill(Color.blue.opacity(0.1))
+                        .fill(Color.accentColor.opacity(0.1))
                         .frame(width: 120, height: 120)
 
                     Image(systemName: appState.biometricIconName)
                         .font(.system(size: 56))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(.accent)
                 }
 
                 Text("iProcess is Locked")
@@ -89,7 +89,7 @@ struct LockedView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color.blue)
+                .background(Color.accentColor)
                 .foregroundStyle(.white)
                 .cornerRadius(12)
             }

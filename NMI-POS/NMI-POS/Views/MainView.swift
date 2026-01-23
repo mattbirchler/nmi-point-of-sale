@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 struct MainView: View {
     @EnvironmentObject var appState: AppState
@@ -43,35 +44,83 @@ struct SaleTab: View {
     @State private var dailySummary: DailySummary = .empty
     @State private var isLoadingSummary = false
     @State private var hasLoadedOnce = false
+    @State private var weeklyData: [DailyVolumeData] = []
+    @State private var isLoadingWeekly = false
 
     var onTodayRevenueTapped: () -> Void
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
-        let profileFirstName = appState.merchantProfile?.firstName ?? ""
-        let firstName = profileFirstName.isEmpty ? "Matt" : profileFirstName
 
-        let timeGreeting: String
         switch hour {
         case 0..<12:
-            timeGreeting = "Good morning"
+            return "Good morning"
         case 12..<17:
-            timeGreeting = "Good afternoon"
+            return "Good afternoon"
         case 17..<22:
-            timeGreeting = "Good evening"
+            return "Good evening"
         default:
-            timeGreeting = "Good night"
+            return "Good night"
         }
-
-        return "\(timeGreeting), \(firstName)"
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 32) {
+                VStack(spacing: 24) {
                     Spacer()
-                        .frame(height: 20)
+                        .frame(height: 8)
+
+                    // Weekly Volume Chart
+                    if !weeklyData.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Last 7 Days")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundStyle(.secondary)
+                                .textCase(.uppercase)
+                                .tracking(1)
+
+                            Chart(weeklyData) { day in
+                                BarMark(
+                                    x: .value("Date", day.date, unit: .day),
+                                    y: .value("Revenue", day.revenue)
+                                )
+                                .foregroundStyle(Color.accentColor.gradient)
+                                .cornerRadius(4)
+                            }
+                            .chartXAxis {
+                                AxisMarks(values: .stride(by: .day)) { value in
+                                    AxisValueLabel(format: .dateTime.weekday(.narrow))
+                                        .font(.caption2)
+                                }
+                            }
+                            .chartYAxis {
+                                AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
+                                    AxisGridLine()
+                                        .foregroundStyle(Color(.systemGray5))
+                                    AxisValueLabel {
+                                        if let revenue = value.as(Double.self) {
+                                            Text(formatChartValue(revenue))
+                                                .font(.caption2)
+                                        }
+                                    }
+                                }
+                            }
+                            .frame(height: 100)
+                        }
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(16)
+                    } else if isLoadingWeekly && !hasLoadedOnce {
+                        VStack {
+                            ProgressView()
+                        }
+                        .frame(height: 100)
+                        .frame(maxWidth: .infinity)
+                        .background(Color(.systemGray6))
+                        .cornerRadius(16)
+                    }
 
                     // Hero Revenue Display
                     VStack(spacing: 12) {
@@ -111,7 +160,7 @@ struct SaleTab: View {
                         .buttonStyle(.plain)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 40)
+                    .padding(.vertical, 32)
 
                     // New Sale Button - Big & Bold
                     Button {
@@ -145,22 +194,28 @@ struct SaleTab: View {
             }
             .navigationTitle(greeting)
             .refreshable {
-                await loadDailySummary()
+                await loadAllData()
             }
             .sheet(isPresented: $showNewSale) {
                 NewSaleView(onComplete: {
                     Task {
-                        await loadDailySummary()
+                        await loadAllData()
                     }
                 })
             }
             .task {
                 if !hasLoadedOnce {
-                    await loadDailySummary()
+                    await loadAllData()
                     hasLoadedOnce = true
                 }
             }
         }
+    }
+
+    private func loadAllData() async {
+        async let summaryTask: () = loadDailySummary()
+        async let weeklyTask: () = loadWeeklyData()
+        _ = await (summaryTask, weeklyTask)
     }
 
     private func loadDailySummary() async {
@@ -173,6 +228,62 @@ struct SaleTab: View {
         }
         isLoadingSummary = false
     }
+
+    private func loadWeeklyData() async {
+        isLoadingWeekly = true
+
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let sevenDaysAgo = calendar.date(byAdding: .day, value: -6, to: today)!
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)!
+
+        do {
+            let transactions = try await NMIService.shared.getTransactions(
+                securityKey: appState.securityKey,
+                startDate: sevenDaysAgo,
+                endDate: tomorrow,
+                adjustForTimezone: true
+            )
+
+            // Group transactions by day and sum revenue
+            let successfulTransactions = transactions.filter { $0.status.isSuccessful }
+            let grouped = Dictionary(grouping: successfulTransactions) { transaction in
+                calendar.startOfDay(for: transaction.date)
+            }
+
+            // Create data points for all 7 days (including days with no transactions)
+            var data: [DailyVolumeData] = []
+            for dayOffset in 0..<7 {
+                let date = calendar.date(byAdding: .day, value: dayOffset, to: sevenDaysAgo)!
+                let dayStart = calendar.startOfDay(for: date)
+                let revenue = grouped[dayStart]?.reduce(0) { $0 + $1.total } ?? 0
+                data.append(DailyVolumeData(date: dayStart, revenue: revenue))
+            }
+
+            weeklyData = data
+        } catch {
+            // Silently fail - just show empty chart
+            weeklyData = []
+        }
+
+        isLoadingWeekly = false
+    }
+
+    private func formatChartValue(_ value: Double) -> String {
+        let symbol = appState.settings.currency.symbol
+        if value >= 1000 {
+            return "\(symbol)\(Int(value / 1000))k"
+        }
+        return "\(symbol)\(Int(value))"
+    }
+}
+
+// MARK: - Daily Volume Data
+
+struct DailyVolumeData: Identifiable {
+    let id = UUID()
+    let date: Date
+    let revenue: Double
 }
 
 #Preview {

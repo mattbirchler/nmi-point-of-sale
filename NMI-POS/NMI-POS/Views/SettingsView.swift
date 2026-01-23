@@ -65,7 +65,7 @@ struct SettingsView: View {
                             settingsCard {
                                 biometricRow
                             } header: {
-                                SettingsSectionHeader(icon: "lock.fill", title: "Security", color: .blue)
+                                SettingsSectionHeader(icon: "lock.fill", title: "Security", color: .accentColor)
                             }
                             .opacity(appeared ? 1 : 0)
                             .offset(y: appeared ? 0 : 20)
@@ -442,7 +442,7 @@ struct SettingsView: View {
                 }
             } icon: {
                 Image(systemName: appState.biometricIconName)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(.accent)
             }
 
             Spacer()
@@ -452,7 +452,7 @@ struct SettingsView: View {
                 set: { appState.updateBiometricEnabled($0) }
             ))
             .labelsHidden()
-            .tint(.blue)
+            .tint(.accentColor)
         }
         .padding(16)
     }
