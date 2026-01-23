@@ -60,6 +60,18 @@ struct SettingsView: View {
                         .offset(y: appeared ? 0 : 20)
                         .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.2), value: appeared)
 
+                        // Security Section (only if biometrics available)
+                        if appState.canUseBiometrics {
+                            settingsCard {
+                                biometricRow
+                            } header: {
+                                SettingsSectionHeader(icon: "lock.fill", title: "Security", color: .blue)
+                            }
+                            .opacity(appeared ? 1 : 0)
+                            .offset(y: appeared ? 0 : 20)
+                            .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.25), value: appeared)
+                        }
+
                         // About Section
                         settingsCard {
                             VStack(spacing: 0) {
@@ -72,13 +84,13 @@ struct SettingsView: View {
                         }
                         .opacity(appeared ? 1 : 0)
                         .offset(y: appeared ? 0 : 20)
-                        .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.25), value: appeared)
+                        .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.3), value: appeared)
 
                         // Sign Out Button
                         signOutButton
                             .opacity(appeared ? 1 : 0)
                             .offset(y: appeared ? 0 : 20)
-                            .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.3), value: appeared)
+                            .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.35), value: appeared)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -414,6 +426,35 @@ struct SettingsView: View {
         }
         .padding(16)
         .animation(.spring(response: 0.3), value: appState.settings.tippingEnabled)
+    }
+
+    // MARK: - Biometric Row
+
+    private var biometricRow: some View {
+        HStack {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(appState.biometricDisplayName)
+                        .font(.system(size: 16, weight: .medium))
+                    Text("Require \(appState.biometricDisplayName) to open the app")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                }
+            } icon: {
+                Image(systemName: appState.biometricIconName)
+                    .foregroundStyle(.blue)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: Binding(
+                get: { appState.settings.biometricEnabled },
+                set: { appState.updateBiometricEnabled($0) }
+            ))
+            .labelsHidden()
+            .tint(.blue)
+        }
+        .padding(16)
     }
 
     // MARK: - Currency Row

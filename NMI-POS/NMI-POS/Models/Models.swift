@@ -45,6 +45,7 @@ struct AppSettings: Codable, Equatable {
     var surchargeRate: Double  // Percentage (0.00 - 3.00)
     var tippingEnabled: Bool
     var tipPercentages: [Double]  // Up to 3 custom tip percentages
+    var biometricEnabled: Bool
 
     static let `default` = AppSettings(
         currency: .usd,
@@ -54,7 +55,8 @@ struct AppSettings: Codable, Equatable {
         surchargeEnabled: false,
         surchargeRate: 0.0,
         tippingEnabled: false,
-        tipPercentages: [15, 20, 25]
+        tipPercentages: [15, 20, 25],
+        biometricEnabled: false
     )
 }
 

@@ -1,11 +1,20 @@
 import Foundation
 import SwiftUI
+import LocalAuthentication
 
 enum AppScreen: Equatable {
     case login
     case welcome
     case onboarding
     case main
+    case locked
+}
+
+enum BiometricType {
+    case none
+    case faceID
+    case touchID
+    case opticID
 }
 
 @MainActor
@@ -58,7 +67,12 @@ class AppState: ObservableObject {
         // Determine initial screen
         if credentials != nil && merchantProfile != nil {
             if settings.hasCompletedOnboarding {
-                currentScreen = .main
+                // If biometric is enabled, show locked screen first
+                if settings.biometricEnabled {
+                    currentScreen = .locked
+                } else {
+                    currentScreen = .main
+                }
             } else {
                 currentScreen = .welcome
             }
@@ -163,7 +177,8 @@ class AppState: ObservableObject {
         surchargeEnabled: Bool = false,
         surchargeRate: Double = 0,
         tippingEnabled: Bool = false,
-        tipPercentages: [Double] = [15, 20, 25]
+        tipPercentages: [Double] = [15, 20, 25],
+        biometricEnabled: Bool = false
     ) {
         settings.currency = currency
         settings.taxRate = taxRate
@@ -171,6 +186,7 @@ class AppState: ObservableObject {
         settings.surchargeRate = surchargeRate
         settings.tippingEnabled = tippingEnabled
         settings.tipPercentages = tipPercentages
+        settings.biometricEnabled = biometricEnabled
         settings.hasCompletedOnboarding = true
 
         saveSettings()
@@ -213,6 +229,96 @@ class AppState: ObservableObject {
         // Limit to 3 tip percentages, clamp each to 0-100%
         settings.tipPercentages = percentages.prefix(3).map { min(max($0, 0), 100) }
         saveSettings()
+    }
+
+    func updateBiometricEnabled(_ enabled: Bool) {
+        settings.biometricEnabled = enabled
+        saveSettings()
+    }
+
+    // MARK: - Biometric Authentication
+
+    var biometricType: BiometricType {
+        let context = LAContext()
+        var error: NSError?
+
+        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+            return .none
+        }
+
+        switch context.biometryType {
+        case .faceID:
+            return .faceID
+        case .touchID:
+            return .touchID
+        case .opticID:
+            return .opticID
+        @unknown default:
+            return .none
+        }
+    }
+
+    var biometricDisplayName: String {
+        switch biometricType {
+        case .faceID:
+            return "Face ID"
+        case .touchID:
+            return "Touch ID"
+        case .opticID:
+            return "Optic ID"
+        case .none:
+            return "Biometric Authentication"
+        }
+    }
+
+    var biometricIconName: String {
+        switch biometricType {
+        case .faceID:
+            return "faceid"
+        case .touchID:
+            return "touchid"
+        case .opticID:
+            return "opticid"
+        case .none:
+            return "lock.fill"
+        }
+    }
+
+    var canUseBiometrics: Bool {
+        biometricType != .none
+    }
+
+    func authenticateWithBiometrics() async -> Bool {
+        let context = LAContext()
+        var error: NSError?
+
+        guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
+            return false
+        }
+
+        do {
+            let success = try await context.evaluatePolicy(
+                .deviceOwnerAuthenticationWithBiometrics,
+                localizedReason: "Unlock iProcess to access your payment terminal"
+            )
+            if success {
+                currentScreen = .main
+            }
+            return success
+        } catch {
+            return false
+        }
+    }
+
+    func unlockApp() async {
+        if settings.biometricEnabled {
+            let success = await authenticateWithBiometrics()
+            if !success {
+                // Stay on locked screen if authentication fails
+                return
+            }
+        }
+        currentScreen = .main
     }
 
     // MARK: - Helpers

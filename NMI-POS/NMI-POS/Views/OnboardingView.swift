@@ -13,7 +13,12 @@ struct OnboardingView: View {
     // Tipping settings
     @State private var tippingEnabled = false
 
-    private let totalSteps = 4
+    // Biometric settings
+    @State private var biometricEnabled = false
+
+    private var totalSteps: Int {
+        appState.canUseBiometrics ? 5 : 4
+    }
 
     private var taxRate: Double {
         Double(taxRateString) ?? 0
@@ -54,6 +59,12 @@ struct OnboardingView: View {
                     // Step 4: Tipping
                     tippingView
                         .tag(3)
+
+                    // Step 5: Biometric (only if available)
+                    if appState.canUseBiometrics {
+                        biometricView
+                            .tag(4)
+                    }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(.easeInOut, value: currentStep)
@@ -377,6 +388,69 @@ struct OnboardingView: View {
         .padding()
     }
 
+    // MARK: - Biometric View
+
+    private var biometricView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            VStack(spacing: 12) {
+                Image(systemName: appState.biometricIconName)
+                    .font(.system(size: 64))
+                    .foregroundStyle(.blue)
+
+                Text("Secure Your App")
+                    .font(.title)
+                    .fontWeight(.bold)
+
+                Text("Use \(appState.biometricDisplayName) to quickly and securely unlock iProcess")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+
+            // Toggle
+            VStack(spacing: 16) {
+                Toggle(isOn: $biometricEnabled) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Enable \(appState.biometricDisplayName)")
+                            .font(.headline)
+                        Text("Require authentication when opening the app")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .tint(.blue)
+                .padding()
+                .background(Color(.systemGray6))
+                .cornerRadius(12)
+
+                if biometricEnabled {
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.shield.fill")
+                            .foregroundStyle(.blue)
+                        Text("Your payment data will be protected")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(12)
+                }
+            }
+            .padding(.horizontal, 32)
+
+            Text("You can change this later in Settings")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+
+            Spacer()
+        }
+        .padding()
+    }
+
     // MARK: - Actions
 
     private func completeSetup() {
@@ -386,7 +460,8 @@ struct OnboardingView: View {
             surchargeEnabled: surchargeEnabled,
             surchargeRate: surchargeRate,
             tippingEnabled: tippingEnabled,
-            tipPercentages: [15, 20, 25]
+            tipPercentages: [15, 20, 25],
+            biometricEnabled: biometricEnabled
         )
     }
 }
