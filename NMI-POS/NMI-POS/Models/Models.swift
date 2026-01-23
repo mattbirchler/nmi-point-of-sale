@@ -61,6 +61,7 @@ struct AppSettings: Codable, Equatable {
 }
 
 enum HistoryDateRange: String, Codable, CaseIterable, Identifiable {
+    case today = "today"
     case last7Days = "last_7_days"
     case last30Days = "last_30_days"
     case last90Days = "last_90_days"
@@ -72,6 +73,7 @@ enum HistoryDateRange: String, Codable, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
+        case .today: return "Today"
         case .last7Days: return "Last 7 Days"
         case .last30Days: return "Last 30 Days"
         case .last90Days: return "Last 90 Days"
@@ -86,6 +88,8 @@ enum HistoryDateRange: String, Codable, CaseIterable, Identifiable {
         let now = Date()
 
         switch self {
+        case .today:
+            return calendar.startOfDay(for: now)
         case .last7Days:
             return calendar.date(byAdding: .day, value: -7, to: now)
         case .last30Days:
@@ -99,6 +103,11 @@ enum HistoryDateRange: String, Codable, CaseIterable, Identifiable {
         case .allTime:
             return nil
         }
+    }
+
+    /// Whether this range should use timezone adjustment for the API query
+    var shouldAdjustForTimezone: Bool {
+        self == .today
     }
 }
 

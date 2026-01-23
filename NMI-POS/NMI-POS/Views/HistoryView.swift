@@ -13,6 +13,10 @@ struct HistoryView: View {
     @State private var errorMessage: String?
     @State private var hasLoadedOnce = false
     @State private var viewMode: HistoryViewMode = .list
+    @State private var selectedRange: HistoryDateRange = .last7Days
+
+    /// Optional initial date range to show (e.g., when tapping today's revenue)
+    var initialDateRange: HistoryDateRange?
 
     var body: some View {
         NavigationStack {
@@ -54,14 +58,14 @@ struct HistoryView: View {
                     Menu {
                         ForEach(HistoryDateRange.allCases) { range in
                             Button {
-                                appState.settings.historyDateRange = range
+                                selectedRange = range
                                 Task {
                                     await loadTransactions()
                                 }
                             } label: {
                                 HStack {
                                     Text(range.displayName)
-                                    if appState.settings.historyDateRange == range {
+                                    if selectedRange == range {
                                         Image(systemName: "checkmark")
                                     }
                                 }
@@ -69,7 +73,7 @@ struct HistoryView: View {
                         }
                     } label: {
                         HStack(spacing: 4) {
-                            Text(appState.settings.historyDateRange.displayName)
+                            Text(selectedRange.displayName)
                                 .font(.subheadline)
                             Image(systemName: "chevron.down")
                                 .font(.caption)
@@ -83,6 +87,10 @@ struct HistoryView: View {
             }
             .task {
                 if !hasLoadedOnce {
+                    // Use initial date range if provided, otherwise default to 7 days
+                    if let initial = initialDateRange {
+                        selectedRange = initial
+                    }
                     await loadTransactions()
                     hasLoadedOnce = true
                 }
@@ -148,7 +156,7 @@ struct HistoryView: View {
             Text("No Transactions Found")
                 .font(.headline)
 
-            Text("No transactions in the \(appState.settings.historyDateRange.displayName.lowercased())")
+            Text(selectedRange == .today ? "No transactions today" : "No transactions in the \(selectedRange.displayName.lowercased())")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -460,13 +468,23 @@ struct HistoryView: View {
         errorMessage = nil
 
         do {
-            let endDate = Date()
-            let startDate = appState.settings.historyDateRange.startDate
+            let endDate: Date
+            let startDate = selectedRange.startDate
+
+            // For "today", set end date to end of today (start of tomorrow)
+            if selectedRange == .today {
+                let calendar = Calendar.current
+                let tomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: Date()))!
+                endDate = tomorrow
+            } else {
+                endDate = Date()
+            }
 
             transactions = try await NMIService.shared.getTransactions(
                 securityKey: appState.securityKey,
                 startDate: startDate,
-                endDate: endDate
+                endDate: endDate,
+                adjustForTimezone: selectedRange.shouldAdjustForTimezone
             )
         } catch let error as NMIError {
             errorMessage = error.localizedDescription

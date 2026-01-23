@@ -3,16 +3,20 @@ import SwiftUI
 struct MainView: View {
     @EnvironmentObject var appState: AppState
     @State private var selectedTab = 0
+    @State private var historyDateRange: HistoryDateRange? = nil
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            SaleTab()
+            SaleTab(onTodayRevenueTapped: {
+                historyDateRange = .today
+                selectedTab = 1
+            })
                 .tabItem {
                     Label("Sale", systemImage: "creditcard")
                 }
                 .tag(0)
 
-            HistoryView()
+            HistoryView(initialDateRange: historyDateRange)
                 .tabItem {
                     Label("History", systemImage: "clock")
                 }
@@ -24,6 +28,12 @@ struct MainView: View {
                 }
                 .tag(2)
         }
+        .onChange(of: selectedTab) { _, newTab in
+            // Reset to default when switching away from history
+            if newTab != 1 {
+                historyDateRange = nil
+            }
+        }
     }
 }
 
@@ -33,6 +43,8 @@ struct SaleTab: View {
     @State private var dailySummary: DailySummary = .empty
     @State private var isLoadingSummary = false
     @State private var hasLoadedOnce = false
+
+    var onTodayRevenueTapped: () -> Void
 
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -75,14 +87,28 @@ struct SaleTab: View {
                                 .scaleEffect(1.2)
                                 .frame(height: 60)
                         } else {
-                            Text(dailySummary.totalRevenue.formatted(as: appState.settings.currency))
-                                .font(.system(size: 56, weight: .bold, design: .rounded))
-                                .foregroundStyle(.accent)
+                            Button {
+                                onTodayRevenueTapped()
+                            } label: {
+                                Text(dailySummary.totalRevenue.formatted(as: appState.settings.currency))
+                                    .font(.system(size: 56, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.accent)
+                            }
+                            .buttonStyle(.plain)
                         }
 
-                        Text("\(dailySummary.transactionCount) transaction\(dailySummary.transactionCount == 1 ? "" : "s") today")
-                            .font(.callout)
+                        Button {
+                            onTodayRevenueTapped()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text("\(dailySummary.transactionCount) transaction\(dailySummary.transactionCount == 1 ? "" : "s") today")
+                                    .font(.callout)
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                            }
                             .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 40)
@@ -151,5 +177,10 @@ struct SaleTab: View {
 
 #Preview {
     MainView()
+        .environmentObject(AppState())
+}
+
+#Preview("Sale Tab") {
+    SaleTab(onTodayRevenueTapped: {})
         .environmentObject(AppState())
 }
